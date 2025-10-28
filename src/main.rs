@@ -5,6 +5,8 @@ use anyhow::Result;
 use clap::Parser;
 
 mod command;
+mod entry;
+mod password;
 mod vault;
 
 #[tokio::main]

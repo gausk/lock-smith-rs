@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use secrecy::SecretBox;
 
 #[derive(Debug, Parser)]
 pub struct Arg {
@@ -14,8 +15,6 @@ pub enum Command {
         id: String,
         #[arg(short, long, help = "Username or email")]
         username: Option<String>,
-        #[arg(short, long, help = "Password (if not provided, will be prompted)")]
-        password: Option<String>,
         #[arg(short, long)]
         description: Option<String>,
         #[arg(long)]

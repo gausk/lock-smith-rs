@@ -1,4 +1,12 @@
-use anyhow::{Context, Result};
+use crate::entry::PasswordEntry;
+use crate::password::{SECRET_KEY, derive_secret_key};
+use aes_gcm::aead::Aead;
+use aes_gcm::{Aes256Gcm, Key, KeyInit};
+use anyhow::{Context, Result, anyhow, bail};
+use clap::builder::TypedValueParser;
+use rand::{Rng, rng};
+use secrecy::ExposeSecret;
+use secrecy::SecretBox;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
@@ -12,14 +20,9 @@ const VAULT_FILE_NAME: &str = "vault.enc";
 
 static VAULT_FILE_PATH: OnceCell<PathBuf> = OnceCell::const_new();
 
-pub async fn init_vault_file() -> &'static PathBuf {
+pub async fn init_vault_file() -> Result<&'static PathBuf> {
     VAULT_FILE_PATH
-        .get_or_init(|| async {
-            get_vault_file_path()
-                .await
-                .inspect_err(|e| eprintln!("{e}"))
-                .expect("error reading account store file")
-        })
+        .get_or_try_init(|| async { get_vault_file_path().await })
         .await
 }
 
@@ -44,40 +47,72 @@ async fn get_vault_file_path() -> Result<PathBuf> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vault {
-    pub(crate) salt: Vec<u8>,
-    pub(crate) nonce: Vec<u8>,
+    pub(crate) salt: [u8; 32],
+    /// Nonce for AES-256-GCM is 96 bit
+    pub(crate) nonce: [u8; 12],
     pub(crate) entries: BTreeMap<String, PasswordEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PasswordEntry {
-    id: String,
-    username: Option<String>,
-    password: String,
-    url: Option<String>,
-    created_at: SystemTime,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    updated_at: Option<SystemTime>,
 }
 
 impl Vault {
     fn new() -> Result<Self> {
+        let mut rng = rng();
         Ok(Self {
-            salt: Vec::new(),
-            nonce: Vec::new(),
+            salt: rng.random(),
+            nonce: rng.random(),
             entries: BTreeMap::new(),
         })
     }
 
+    fn from_nonce_and_salt(nonce: [u8; 12], salt: [u8; 32]) -> Self {
+        Self {
+            salt,
+            nonce,
+            entries: BTreeMap::new(),
+        }
+    }
+
     pub async fn load() -> Result<Self> {
-        let filename = init_vault_file().await;
-        let data = fs::read_to_string(&**filename)
+        let filename = init_vault_file().await?;
+        let data = fs::read(filename)
             .await
             .with_context(|| "failed to read vault data file")?;
-        if data.trim().is_empty() {
+        if data.is_empty() {
             Self::new()
         } else {
-            serde_json::from_str(&data).with_context(|| "failed to decode vault data file")
+            Self::from_encrypted(data)
         }
+    }
+
+    pub async fn save(self) -> Result<()> {
+        let filename = init_vault_file().await?;
+        fs::write(filename, self.encrypt().await?).await;
+        Ok(())
+    }
+
+    fn from_encrypted(data: Vec<u8>) -> Result<Self> {
+        bail!("a vault must be encrypted")
+    }
+
+    async fn encrypt(self) -> Result<Vec<u8>> {
+        let cipher = {
+            let key = self.get_secret_key().await?;
+            let gcm_key = Key::<Aes256Gcm>::from_iter(key.expose_secret().iter().copied());
+            Aes256Gcm::new(&gcm_key)
+        };
+        let plaintext = serde_json::to_vec(&self)?;
+        let ciphertext = cipher
+            .encrypt((&self.nonce).into(), plaintext.as_slice())
+            .map_err(|_| anyhow!("encryption failed"))?;
+        let mut result = Vec::with_capacity(self.salt.len() + self.nonce.len() + ciphertext.len());
+        result.extend(self.salt);
+        result.extend(self.nonce);
+        result.extend(ciphertext);
+        Ok(result)
+    }
+
+    pub async fn get_secret_key(&self) -> Result<&SecretBox<[u8; 32]>> {
+        SECRET_KEY
+            .get_or_try_init(|| async { derive_secret_key(self.salt.as_slice()) })
+            .await
     }
 }
