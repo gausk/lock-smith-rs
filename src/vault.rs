@@ -63,12 +63,12 @@ impl Vault {
         })
     }
 
-    fn from_nonce_and_salt(nonce: [u8; 12], salt: [u8; 32]) -> Self {
-        Self {
-            salt,
-            nonce,
+    fn from_nonce_and_salt(nonce: &[u8], salt: &[u8]) -> Result<Self> {
+        Ok(Self {
+            salt: salt.try_into()?,
+            nonce: nonce.try_into()?,
             entries: BTreeMap::new(),
-        }
+        })
     }
 
     pub async fn load() -> Result<Self> {
@@ -79,7 +79,7 @@ impl Vault {
         if data.is_empty() {
             Self::new()
         } else {
-            Self::from_encrypted(data)
+            Self::from_encrypted(data).await
         }
     }
 
@@ -89,8 +89,23 @@ impl Vault {
         Ok(())
     }
 
-    fn from_encrypted(data: Vec<u8>) -> Result<Self> {
-        bail!("a vault must be encrypted")
+    async fn from_encrypted(data: Vec<u8>) -> Result<Self> {
+        if data.len() < 32 + 12 {
+            bail!("encrypted data is too short");
+        }
+        let salt = &data[0..32];
+        let nonce = &data[32..32 + 12];
+        let mut vault = Vault::from_nonce_and_salt(nonce, salt)?;
+        let cipher = {
+            let key = vault.get_secret_key().await?;
+            let gcm_key = Key::<Aes256Gcm>::from_iter(key.expose_secret().iter().copied());
+            Aes256Gcm::new(&gcm_key)
+        };
+        let plaintext = cipher
+            .decrypt(nonce.into(), &data[32 + 12..])
+            .map_err(|_| anyhow!("decryption failed"))?;
+        vault.entries = serde_json::from_slice(&plaintext)?;
+        Ok(vault)
     }
 
     async fn encrypt(self) -> Result<Vec<u8>> {
@@ -114,5 +129,17 @@ impl Vault {
         SECRET_KEY
             .get_or_try_init(|| async { derive_secret_key(self.salt.as_slice()) })
             .await
+    }
+
+    pub fn list(&self, verbose: bool) -> Result<()> {
+        self.entries.values().for_each(|entry| {});
+        Ok(())
+    }
+
+    pub fn remove(&mut self, id: &str) -> Result<()> {
+        self.entries
+            .remove(id)
+            .map(|_| println!("Password entry with id '{}' deleted successfully", id))
+            .ok_or_else(|| anyhow!("Entry with id '{}' not found", id))
     }
 }
