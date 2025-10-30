@@ -12,16 +12,16 @@ description = "A CLI based Password Manager"
 edition = "2024"
 
 [dependencies]
-arboard = "3.6.1"
 aes-gcm = "0.10.3"
 anyhow = "1.0.100"
+arboard = "3.6.1"
 argon2 = { version = "0.5.3" }
+chrono = { version = "0.4.42", features = ["serde"] }
 clap = { version = "4.5.50", features = ["derive"] }
-chrono = {  version = "0.4.42", features = ["serde"] }
 rand = "0.9.2"
 rpassword = "7.4.0"
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+tabled = { version = "0.20.0", features = ["derive"] }
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "fs", "sync"] }
-tabled = {  version = "0.20.0", features = ["derive"] }
