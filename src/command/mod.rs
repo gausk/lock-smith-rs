@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use secrecy::SecretBox;
 
 #[derive(Debug, Parser)]
 pub struct Arg {
@@ -27,10 +26,16 @@ pub enum Command {
         #[arg(
             short,
             long,
-            help = "Copy password to the clipboard instead of displaying"
+            help = "Copy password to the clipboard instead of displaying",
+            conflicts_with = "show"
         )]
         copy: bool,
-        #[arg(short, long, help = "Display the password in plaintext")]
+        #[arg(
+            short,
+            long,
+            help = "Display the password in plaintext",
+            conflicts_with = "copy"
+        )]
         show: bool,
     },
     #[command(about = "Delete a password entry")]

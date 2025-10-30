@@ -1,4 +1,3 @@
-#![allow(unused)]
 use crate::command::{Arg, Command};
 use crate::vault::Vault;
 use anyhow::Result;
@@ -13,14 +12,28 @@ mod vault;
 async fn main() -> Result<()> {
     let arg = Arg::try_parse()?;
     let mut vault = Vault::load().await?;
+    let update = matches!(arg.command, Command::Add { .. } | Command::Remove { .. });
     match arg.command {
-        Command::Add { .. } => {}
-        Command::List { verbose } => {}
-        Command::Get { .. } => {}
-        Command::Remove { id } => {
-            vault.remove(&id)?;
+        Command::Add {
+            id,
+            username,
+            url,
+            description,
+        } => {
+            vault.add(id, username, url, description)?;
+        }
+        Command::List { verbose } => {
+            vault.list(verbose)?;
+        }
+        Command::Get { id, copy, show: _ } => {
+            vault.get(&id, copy)?;
+        }
+        Command::Remove { ref id } => {
+            vault.remove(id)?;
         }
     }
-    vault.save().await?;
+    if update {
+        vault.save().await?;
+    }
     Ok(())
 }

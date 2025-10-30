@@ -3,7 +3,7 @@ use crate::password::{SECRET_KEY, derive_secret_key};
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, Key, KeyInit};
 use anyhow::{Context, Result, anyhow, bail};
-use clap::builder::TypedValueParser;
+use chrono::Utc;
 use rand::{Rng, rng};
 use secrecy::ExposeSecret;
 use secrecy::SecretBox;
@@ -11,7 +11,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;
-use std::time::SystemTime;
+use tabled::Table;
+use tabled::settings::object::Columns;
+use tabled::settings::{Remove, Style};
 use tokio::fs;
 use tokio::sync::OnceCell;
 
@@ -42,10 +44,10 @@ async fn get_vault_file_path() -> Result<PathBuf> {
             .await
             .with_context(|| format!("Failed to open or create file: {:?}", vault_file))?;
     }
-    Ok(vault_dir)
+    Ok(vault_file)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Vault {
     pub(crate) salt: [u8; 32],
     /// Nonce for AES-256-GCM is 96 bit
@@ -85,7 +87,7 @@ impl Vault {
 
     pub async fn save(self) -> Result<()> {
         let filename = init_vault_file().await?;
-        fs::write(filename, self.encrypt().await?).await;
+        fs::write(filename, self.encrypt().await?).await?;
         Ok(())
     }
 
@@ -114,7 +116,7 @@ impl Vault {
             let gcm_key = Key::<Aes256Gcm>::from_iter(key.expose_secret().iter().copied());
             Aes256Gcm::new(&gcm_key)
         };
-        let plaintext = serde_json::to_vec(&self)?;
+        let plaintext = serde_json::to_vec(&self.entries)?;
         let ciphertext = cipher
             .encrypt((&self.nonce).into(), plaintext.as_slice())
             .map_err(|_| anyhow!("encryption failed"))?;
@@ -131,8 +133,34 @@ impl Vault {
             .await
     }
 
+    pub fn add(
+        &mut self,
+        id: String,
+        username: Option<String>,
+        url: Option<String>,
+        description: Option<String>,
+    ) -> Result<()> {
+        let mut entry = PasswordEntry::new(id.clone(), username, url, description)?;
+        if let Some(old_entry) = self.entries.remove(&id) {
+            // preserve original creation time
+            entry.created_at = old_entry.created_at;
+            // refresh update time
+            entry.updated_at = Some(Utc::now());
+            println!("Password entry with id {} updated successfully", id);
+        } else {
+            println!("Added password entry with id {}", id);
+        }
+        self.entries.insert(id, entry);
+        Ok(())
+    }
+
     pub fn list(&self, verbose: bool) -> Result<()> {
-        self.entries.values().for_each(|entry| {});
+        let mut table = Table::new(self.entries.values().enumerate());
+        table.with(Style::modern());
+        if !verbose {
+            table.with(Remove::column(Columns::new(3..7)));
+        }
+        println!("{table}");
         Ok(())
     }
 
@@ -141,5 +169,18 @@ impl Vault {
             .remove(id)
             .map(|_| println!("Password entry with id '{}' deleted successfully", id))
             .ok_or_else(|| anyhow!("Entry with id '{}' not found", id))
+    }
+
+    pub fn get(&self, id: &str, copy: bool) -> Result<()> {
+        let entry = self
+            .entries
+            .get(id)
+            .ok_or_else(|| anyhow!("Entry with id '{}' not found", id))?;
+        if copy {
+            entry.copy()?;
+        } else {
+            entry.show();
+        }
+        Ok(())
     }
 }
