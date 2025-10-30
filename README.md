@@ -1,105 +1,130 @@
-# git-rs
+# lock-smith-rs
 
-A minimal Git implementation written in Rust from scratch. Implements core Git commands with full compatibility to standard Git repositories.
+A secure, fast, and user-friendly CLI password manager built with Rust.
 
 ## Features
 
-- **`init`** - Initialize a new Git repository
-- **`hash-object`** - Hash files and store as Git objects
-- **`cat-file`** - Display Git object contents
-- **`ls-tree`** - List tree object contents
-- **`write-tree`** - Create tree objects from working directory
-- **`commit-tree`** - Create commit objects
-- **`commit`** - High-level commit with automatic tree creation
+- **Strong Encryption**: AES-256-GCM authenticated encryption
+- **Secure Key Derivation**: Argon2 password-based key derivation
+- **Clipboard Integration**: Copy passwords securely to clipboard
+- **Organized Storage**: Store passwords with metadata (username, URL, description)
+- **Easy Retrieval**: List and search through your password entries
+- **Local Storage**: All data stored locally in encrypted format
+- **Memory Safety**: Sensitive data protection using Rust's `secrecy` crate
+
+## Installation
+
+### From Source
+
+```bash
+git clone https://github.com/gausk/lock-smith-rs.git
+cd lock-smith-rs
+cargo build --release
+```
+
+The binary will be available at `target/release/lock-smith` (or `lock-smith.exe` on Windows).
+
+### Using Cargo
+
+```bash
+cargo install --path .
+```
 
 ## Usage
 
-### Initialize Repository
+### Adding a Password Entry
+
 ```bash
-# Create a new Git repository in current directory
-cargo run -- init
+lock-smith add --id "github" --username "your-username" --url "https://github.com" --description "GitHub account"
 ```
 
-### Hash Objects
-```bash
-# Hash a file (displays hash without storing)
-cargo run -- hash-object README.md
+### Listing All Entries
 
-# Hash and store a file in Git database
-cargo run -- hash-object -w README.md
-# Returns: e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+```bash
+# Basic list
+lock-smith list
+
+# Verbose list with all details
+lock-smith list --verbose
 ```
 
-### Inspect Objects
+### Retrieving a Password
+
 ```bash
-# Display contents of any Git object (blob, tree, or commit)
-cargo run -- cat-file -p e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+# Copy password to clipboard
+lock-smith get --id "github" --copy
 
-# Example output for a blob:
-# Hello, world!
-
-# Example output for a commit:
-# tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904
-# author John Doe <john@example.com> 1698765432 +0000
-# committer John Doe <john@example.com> 1698765432 +0000
-# 
-# Initial commit
+# Display password in terminal (use with caution)
+lock-smith get --id "github" --show
 ```
 
-### Work with Trees
+### Removing an Entry
+
 ```bash
-# List all files in a tree (shows modes, types, hashes, and names)
-cargo run -- ls-tree <tree-hash>
-
-# Show only filenames
-cargo run -- ls-tree --name-only <tree-hash>
-
-# Create tree from current working directory
-cargo run -- write-tree
-# Returns: 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+lock-smith remove --id "github"
 ```
 
-### Create Commits
-```bash
-# Low-level: create commit with specific tree and parent
-cargo run -- commit-tree -m "Initial commit" <tree-hash>
-cargo run -- commit-tree -m "Second commit" -p <parent-hash> <tree-hash>
+## Security
 
-# High-level: create commit automatically (recommended)
-cargo run -- commit -m "Add new feature"
-# Automatically creates tree from working directory and manages HEAD
-```
+- **Master Password**: You'll be prompted for a master password that protects your vault
+- **Encryption**: All passwords are encrypted using AES-256-GCM before storage
+- **Key Derivation**: Master password is processed through Argon2 for secure key generation
+- **Local Storage**: Data is stored locally in `~/.lock-smith/vault.enc`
+- **Memory Protection**: Sensitive data is protected in memory using the `secrecy` crate
 
-### Example Workflow
-```bash
-# 1. Initialize repository
-cargo run -- init
+## Data Storage
 
-# 2. Add some files to your working directory
-echo "Hello, Git!" > hello.txt
+Your encrypted password vault is stored at:
+- **Linux/macOS**: `~/.lock-smith/vault.enc`
+- **Windows**: `%USERPROFILE%\.lock-smith\vault.enc`
 
-# 3. Create a commit
-cargo run -- commit -m "Initial commit with hello.txt"
+## Commands Reference
 
-# 4. Inspect the commit
-cargo run -- cat-file -p HEAD  # If HEAD exists, or use the commit hash
-```
+| Command | Description | Options |
+|---------|-------------|---------|
+| `add` | Add or update a password entry | `--id`, `--username`, `--url`, `--description` |
+| `get` | Retrieve a password entry | `--id`, `--copy`, `--show` |
+| `list` | List all password entries | `--verbose` |
+| `remove` | Delete a password entry | `--id` |
 
-## Implementation
+## Development
 
-Built with Rust using Git's exact object format specification:
-- SHA-1 hashing for content addressing
-- Zlib compression for object storage
-- Proper `.git` directory structure
-- Full compatibility with standard Git
+### Prerequisites
 
-## Building
+- Rust 1.80+ 
+- Cargo
+
+### Building
 
 ```bash
-# Development
 cargo build
-cargo run -- <command>
-
-# Release
-cargo build --release
 ```
+
+### Running Tests
+
+```bash
+cargo test
+```
+
+### Running in Development
+
+```bash
+cargo run -- add --id "test" --username "user"
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Security Notice
+
+This software is provided as-is. While it implements industry-standard encryption practices, please ensure you:
+- Use a strong master password
+- Keep backups of your vault file
+- Regularly update the software
+
+For security issues, please create a private issue or contact the maintainer directly.
