@@ -22,7 +22,7 @@ cd lock-smith-rs
 cargo build --release
 ```
 
-The binary will be available at `target/release/lock-smith` (or `lock-smith.exe` on Windows).
+The binary will be available at `target/release/lock-smith`.
 
 ### Using Cargo
 
@@ -71,12 +71,6 @@ lock-smith remove --id "github"
 - **Key Derivation**: Master password is processed through Argon2 for secure key generation
 - **Local Storage**: Data is stored locally in `~/.lock-smith/vault.enc`
 - **Memory Protection**: Sensitive data is protected in memory using the `secrecy` crate
-
-## Data Storage
-
-Your encrypted password vault is stored at:
-- **Linux/macOS**: `~/.lock-smith/vault.enc`
-- **Windows**: `%USERPROFILE%\.lock-smith\vault.enc`
 
 ## Commands Reference
 

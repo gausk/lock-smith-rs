@@ -19,6 +19,8 @@ use tokio::sync::OnceCell;
 
 const LOCK_SMITH_DIR: &str = ".lock-smith";
 const VAULT_FILE_NAME: &str = "vault.enc";
+const SALT_SIZE: usize = 32;
+const NONCE_SIZE: usize = 12;
 
 static VAULT_FILE_PATH: OnceCell<PathBuf> = OnceCell::const_new();
 
@@ -49,9 +51,8 @@ async fn get_vault_file_path() -> Result<PathBuf> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Vault {
-    pub(crate) salt: [u8; 32],
-    /// Nonce for AES-256-GCM is 96 bit
-    pub(crate) nonce: [u8; 12],
+    pub(crate) salt: [u8; SALT_SIZE],
+    pub(crate) nonce: [u8; NONCE_SIZE],
     pub(crate) entries: BTreeMap<String, PasswordEntry>,
 }
 
@@ -92,11 +93,11 @@ impl Vault {
     }
 
     async fn from_encrypted(data: Vec<u8>) -> Result<Self> {
-        if data.len() < 32 + 12 {
+        if data.len() < SALT_SIZE + NONCE_SIZE {
             bail!("encrypted data is too short");
         }
-        let salt = &data[0..32];
-        let nonce = &data[32..32 + 12];
+        let salt = &data[0..SALT_SIZE];
+        let nonce = &data[SALT_SIZE..SALT_SIZE + NONCE_SIZE];
         let mut vault = Vault::from_nonce_and_salt(nonce, salt)?;
         let cipher = {
             let key = vault.get_secret_key().await?;
@@ -104,9 +105,10 @@ impl Vault {
             Aes256Gcm::new(&gcm_key)
         };
         let plaintext = cipher
-            .decrypt(nonce.into(), &data[32 + 12..])
-            .map_err(|_| anyhow!("decryption failed"))?;
-        vault.entries = serde_json::from_slice(&plaintext)?;
+            .decrypt(nonce.into(), &data[SALT_SIZE + NONCE_SIZE..])
+            .map_err(|_| anyhow!("failed loading vault"))?;
+        vault.entries =
+            serde_json::from_slice(&plaintext).with_context(|| "failed loading vault")?;
         Ok(vault)
     }
 

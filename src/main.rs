@@ -10,8 +10,8 @@ mod vault;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let arg = Arg::try_parse()?;
     let mut vault = Vault::load().await?;
+    let arg = Arg::try_parse()?;
     let update = matches!(arg.command, Command::Add { .. } | Command::Remove { .. });
     match arg.command {
         Command::Add {
